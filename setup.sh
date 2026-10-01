@@ -50,7 +50,7 @@ if [ "$MODE" = "conda" ]; then
 # ── Venv path ───────────────────────────────────────────────────────
 elif [ "$MODE" = "venv" ]; then
     PYTHON=""
-    for cmd in python3.12 python3.11 python3.10 python3; do
+    for cmd in python3.12 python3.11 python3.10 python; do
         if command -v "$cmd" &>/dev/null; then
             ver=$("$cmd" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
             major=$("$cmd" -c "import sys; print(sys.version_info.major)")
@@ -68,12 +68,16 @@ elif [ "$MODE" = "venv" ]; then
         info "Creating virtual environment..."
         $PYTHON -m venv .venv
     fi
-    source .venv/bin/activate
+    if [ -f .venv/Scripts/activate ]; then
+        source .venv/Scripts/activate
+    else
+        source .venv/bin/activate
+    fi
 
     info "Installing dependencies..."
-    pip install --upgrade pip setuptools wheel -q
-    pip install -e "coralai/dependencies/PyTorch-NEAT" -q
-    pip install -e ".[dev]" -q
+    python -m pip install --upgrade pip setuptools wheel -q
+    python -m pip install -e "coralai/dependencies/PyTorch-NEAT" -q
+    python -m pip install -e ".[dev]" -q
 
     info ""
     info "Setup complete! Activate with:"

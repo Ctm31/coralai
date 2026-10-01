@@ -201,7 +201,7 @@ def main():
         out_mem = evolver._get_scratch("out_mem", substrate.mem[0, evolver.act_chinds])
         apply_weights_and_biases(substrate.mem, out_mem, evolver.sense_chinds,
                                  cw, cb, evolver.dir_kernel, evolver.dir_order,
-                                 substrate.ti_indices)
+                                 substrate.ti_indices, evolver._get_key_to_local())
         substrate.mem[0, evolver.act_chinds] = out_mem
         sync(); timings["0_nn_forward"] += time.perf_counter() - t0
 
