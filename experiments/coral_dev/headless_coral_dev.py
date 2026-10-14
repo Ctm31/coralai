@@ -1,7 +1,9 @@
 """Headless screenshot runner for the development Coral experiment.
 
-Save this file beside ``experiments/coral_dev/run.py`` and run, for example:
-    python experiments/coral_dev/headless_coral_dev.py --steps 300 --env patches
+Save this file beside ``experiments/coral_dev/run.py`` and run:
+    python experiments/coral_dev/headless_coral_dev.py
+
+Edit ``headless_coral_dev_config.json`` beside this script to configure a run.
 """
 
 import argparse
@@ -18,33 +20,58 @@ import taichi as ti
 from PIL import Image
 
 
+DEFAULT_CONFIG_PATH = Path(__file__).with_name("headless_coral_dev_config.json")
+DEFAULT_CONFIG = {
+    "steps": 300,
+    "shape": 400,
+    "backend": "cpu",
+    "device": "cpu",
+    "seed": 42,
+    "env": "flat",
+    "env_param": None,
+    "infra_decay": 0.0,
+    "defense_coeff": 0.0,
+    "radiate_interval": 50,
+    "cleanup_interval": 100,
+    "emergency_pop_cap": 1000,
+    "checkpoint_interval": 1000,
+    "log_interval": 10,
+    "screenshot_interval": 1,
+    "max_screenshots": 2000,
+    "resume_from": None,
+    "output_dir": None,
+}
+
 parser = argparse.ArgumentParser(description="Headless Coral Dev runner with PNG output")
-parser.add_argument("--steps", type=int, required=True)
-parser.add_argument("--shape", type=int, default=400)
-parser.add_argument("--backend", choices=["cpu", "metal", "cuda", "vulkan"], default="cpu")
-parser.add_argument("--device", choices=["cpu", "mps", "cuda"], default="cpu")
-parser.add_argument("--seed", type=int, default=42)
-parser.add_argument("--env", default="flat",
-                    choices=["flat", "hole", "ring", "stripes", "corners", "patches", "oases"])
-parser.add_argument("--env-param", type=float, default=None)
-parser.add_argument("--infra-decay", type=float, default=0.0)
-parser.add_argument("--defense-coeff", type=float, default=0.0)
-parser.add_argument("--radiate-interval", type=int, default=50)
-parser.add_argument("--cleanup-interval", type=int, default=100)
-parser.add_argument("--emergency-pop-cap", type=int, default=1000)
-parser.add_argument("--checkpoint-interval", type=int, default=1000)
-parser.add_argument("--log-interval", type=int, default=10)
-parser.add_argument("--screenshot-interval", type=int, default=1,
-                    help="Save one PNG every N simulation steps")
-parser.add_argument("--max-screenshots", type=int, default=2000)
-parser.add_argument("--resume-from", type=str, default=None)
-parser.add_argument("--output-dir", type=Path, default=None)
-args = parser.parse_args()
+parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH,
+                    help="Path to a JSON run configuration")
+cli_args = parser.parse_args()
+
+try:
+    with cli_args.config.open() as file:
+        config = json.load(file)
+except FileNotFoundError:
+    parser.error(f"config file not found: {cli_args.config}")
+except json.JSONDecodeError as error:
+    parser.error(f"invalid JSON in {cli_args.config}: {error}")
+
+if not isinstance(config, dict):
+    parser.error("config file must contain one JSON object")
+unknown_keys = set(config) - set(DEFAULT_CONFIG)
+if unknown_keys:
+    parser.error(f"unknown config option(s): {', '.join(sorted(unknown_keys))}")
+args = argparse.Namespace(**(DEFAULT_CONFIG | config))
 
 if args.steps < 1:
-    parser.error("--steps must be positive")
+    parser.error("config option 'steps' must be positive")
 if args.screenshot_interval < 1:
-    parser.error("--screenshot-interval must be positive")
+    parser.error("config option 'screenshot_interval' must be positive")
+if args.backend not in {"cpu", "metal", "cuda", "vulkan"}:
+    parser.error("config option 'backend' must be cpu, metal, cuda, or vulkan")
+if args.device not in {"cpu", "mps", "cuda"}:
+    parser.error("config option 'device' must be cpu, mps, or cuda")
+if args.env not in {"flat", "hole", "ring", "stripes", "corners", "patches", "oases"}:
+    parser.error("config option 'env' is not a supported environment")
 
 random.seed(args.seed)
 np.random.seed(args.seed)
@@ -107,7 +134,7 @@ def main():
         print(f"[resume] loaded {args.resume_from} (step {evolver.timestep})")
 
     start_step = evolver.timestep
-    run_dir = args.output_dir or (
+    run_dir = Path(args.output_dir) if args.output_dir else (
         Path(__file__).resolve().parents[2] / "runs" /
         f"coral_dev_headless_{datetime.now():%Y%m%d_%H%M%S}"
     )
@@ -117,7 +144,8 @@ def main():
 
     with (run_dir / "meta.json").open("w") as file:
         json.dump({
-            "experiment": exp.name, "shape": list(shape), "seed": args.seed,
+            "experiment": exp.name, "config_file": str(cli_args.config),
+            "shape": list(shape), "seed": args.seed,
             "env": env.to_dict(), "env_persist": env.persist,
             "start_step": start_step, "resumed_from": args.resume_from,
             "infra_decay": args.infra_decay, "defense_coeff": args.defense_coeff,
